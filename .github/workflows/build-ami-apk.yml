@@ -58,6 +58,7 @@ jobs:
           AMI_KEY_ALIAS: ${{ secrets.AMI_KEY_ALIAS }}
           AMI_KEY_PASSWORD: ${{ secrets.AMI_KEY_PASSWORD }}
         run: |
+          export AMI_SIGNING_STORE_FILE="$RUNNER_TEMP/ami-release.jks"
           python3 scripts/prepare_release.py
           cd android
           gradle --no-daemon --stacktrace :app:assembleRelease
