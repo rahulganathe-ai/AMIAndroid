@@ -66,8 +66,8 @@ function showWatchlists(){
   const note=document.createElement('small');note.textContent='Not connected';price.append(note);
   top.append(title,price);a.append(top);
   const actions=document.createElement('div');actions.className='watch-buttons';
-  [['ticket','Order ticket'],['replace','Replace'],['remove','Remove']].forEach(([action,label])=>{
-    const btn=document.createElement('button');btn.type='button';btn.className=action==='ticket'?'btn primary':'btn';
+  [['buy','BUY'],['sell','SELL'],['replace','Replace'],['remove','Remove']].forEach(([action,label])=>{
+    const btn=document.createElement('button');btn.type='button';btn.className=action==='buy'?'btn ami-buy':action==='sell'?'btn ami-sell':'btn';
     btn.dataset.action=action;btn.dataset.code=symbol;btn.textContent=label;actions.append(btn)
   });a.append(actions);area.append(a);
  });
@@ -96,7 +96,7 @@ byId('watchCards').onclick=e=>{
  const code=b.dataset.code,action=b.dataset.action,w=currentWatchlist();
  if(action==='remove'){w.symbols=w.symbols.filter(s=>s!==code);saveWatchlists();byId('watchStatus').textContent=code+' removed.'}
  if(action==='replace'){replaceCode=code;byId('replaceEditor').hidden=false;byId('replacementSymbol').focus()}
- if(action==='ticket'){byId('orderPreview').hidden=false;byId('orderSymbol').textContent=code+' · LTP unavailable'}
+ if(action==='buy'||action==='sell'){byId('orderSide').value=action.toUpperCase();byId('orderPreview').hidden=false;byId('orderSymbol').textContent=code+' · Live price unavailable';byId('orderPreview').scrollIntoView({behavior:'smooth',block:'start'})}
 };
 byId('saveReplacement').onclick=()=>{
  const code=validateCode(byId('replacementSymbol').value),w=currentWatchlist();
@@ -114,3 +114,45 @@ if html.count(anchor)!=1: raise SystemExit("JS init point changed")
 html=html.replace(anchor,js+'\n'+anchor,1)
 p.write_text(html,encoding="utf-8")
 print("Prepared 50-stock watchlist UI; order execution intentionally unavailable")
+
+# Prominent BUY / SELL ticket and an accessible Orders screen (no live orders without API).
+html=p.read_text(encoding="utf-8")
+t_start=html.index('<div id="orderPreview" class="watch-edit" hidden>')
+t_end=html.index('</div>',t_start)+len('</div>')
+ticket=html[t_start:t_end]
+html=html[:t_start]+html[t_end:]
+ticket=ticket.replace('<b id="orderSymbol"></b>', '<div class="ami-ticket-title"><b id="orderSymbol"></b><span class="ami-state">Broker not connected</span></div>')
+ticket=ticket.replace('Order entry preview only. No live quote or broker API is connected. No trade can be placed.', 'Order ticket preview: no live price or trading until an authorised market data and broker API is connected.')
+ticket=ticket.replace('<button class="btn" type="button" disabled>Place order — Unavailable</button>', '<button class="btn ami-blocked" type="button" disabled>Place order · Connect broker first</button>')
+where='<div class="smallnote" id="watchStatus" role="status" aria-live="polite"></div>'
+assert html.count(where)==1
+html=html.replace(where,ticket+where,1)
+nav='<button data-page="watchlist"><span class="ico">◎</span> Watchlist</button>'
+assert html.count(nav)==1
+html=html.replace(nav,nav+'<button data-page="orders"><span class="ico">▣</span> Orders</button>',1)
+order_screen='''<section id="orders" class="view"><div class="sectionhead"><h3>Orders &amp; Positions</h3><span>Live trading: Not connected</span></div><div class="configbox"><h3>Order book</h3><div class="notice"><b>No broker connected.</b><p>No live orders, executed trades, holdings, positions, or MTM are available. AMI never invents orders or prices.</p></div><p>Choose a stock in Watchlist, then tap <b>BUY</b> or <b>SELL</b> for the order preview. Real trades need an authorised broker and explicit order confirmation.</p><button type="button" class="btn primary" id="ordersToWatchlist">Open Watchlist</button></div></section>'''
+assert html.count('<section id="broker" class="view">')==1
+html=html.replace('<section id="broker" class="view">',order_screen+'\n<section id="broker" class="view">',1)
+assert html.count("broker:'Broker API Connection',forex:")==1
+html=html.replace("broker:'Broker API Connection',forex:","broker:'Broker API Connection',orders:'Orders & Positions',forex:",1)
+assert html.count('initWatchlists();showWatchlists();')==1
+html=html.replace('initWatchlists();showWatchlists();','byId("ordersToWatchlist").onclick=()=>document.querySelector("[data-page=watchlist]").click();\ninitWatchlists();showWatchlists();',1)
+css='''<style>
+.ami-buy,.ami-sell{color:#fff!important;border:0!important;border-radius:10px!important;font-size:17px!important;min-height:50px!important;font-weight:900!important}
+.ami-buy{background:#0d8056!important}.ami-sell{background:#bf304b!important}
+.ami-buy:focus-visible,.ami-sell:focus-visible{outline:3px solid #ffb347;outline-offset:3px}
+.watch-buttons{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px!important}
+.watch-buttons .btn{min-height:46px!important}#orderPreview{display:block;scroll-margin-top:24px;border:2px solid #285f9f!important;box-shadow:0 5px 24px #164b7b26!important}
+#orderPreview[hidden]{display:none!important}#orderPreview label{display:block;font-weight:800;margin-top:10px;color:#1f3c64}
+#orderPreview select,#orderPreview input{display:block;width:100%;max-width:420px;min-height:51px;border:1px solid #afc1d8;border-radius:9px;padding:9px 12px;margin-top:7px}
+.ami-ticket-title{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.ami-ticket-title b{font-size:22px}
+.ami-state{font-size:12px;padding:7px 10px;border-radius:8px;background:#fff0e1;color:#9b5322;font-weight:900}
+.ami-blocked{font-size:17px!important;font-weight:900!important;opacity:.66}
+</style>'''
+html=html.replace('</head>',css+'</head>',1)
+p.write_text(html,encoding="utf-8")
+build_file=p.parents[3]/"build.gradle"
+build_text=build_file.read_text(encoding="utf-8")
+build_text=build_text.replace("versionCode 4; versionName '1.2.1'","versionCode 5; versionName '1.3.0'")
+build_file.write_text(build_text,encoding="utf-8")
+print('Prepared 50-stock BUY/SELL and order ticket UI; real trading unavailable until API connected')
