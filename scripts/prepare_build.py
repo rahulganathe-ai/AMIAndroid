@@ -49,6 +49,22 @@ replace_once(
 )
 replace_once('</style></head>', """#broker .configbox{max-width:820px}#broker .setting label{font-size:18px;font-weight:800;color:var(--ink)}#broker .setting select{font-size:18px;font-weight:750;min-height:54px}#broker .btn{font-size:17px;font-weight:800;min-height:50px}#broker .notice{font-size:15px;line-height:1.7}#broker .hero p{font-size:16px}#broker .hero h2{font-size:28px}#broker .smallnote{font-size:13px}
 </style></head>""")
+# Make broker setup visible from the top bar; never save or accept unverified secrets.
+replace_once(
+    '<button class="btn primary" id="refresh">',
+    '<button class="btn" id="quickBrokerConnect" type="button">⇄ Connect Broker</button><button class="btn primary" id="refresh">',
+)
+credentials = """<div id="brokerAuthSetup" class="ami-auth-panel"><h3>API &amp; Authorization Setup</h3><p>Enter your Client ID to prepare for broker authentication. This version does not save or send it. API Key, Secret Key and Access Token are locked until an official, secure broker connection is implemented.</p><div class="ami-auth-grid"><div><label for="brokerClientId">Client ID (not saved)</label><input id="brokerClientId" type="text" inputmode="text" maxlength="80" autocomplete="off" autocapitalize="off" placeholder="Your broker Client ID"></div><div><label for="brokerApiKey">API Key / App ID</label><input id="brokerApiKey" type="password" placeholder="Secure integration required" autocomplete="off" disabled></div><div><label for="brokerSecretKey">API Secret / Security Key</label><input id="brokerSecretKey" type="password" placeholder="Secure integration required" autocomplete="off" disabled></div><div><label for="brokerAccessToken">Auth / Access Token</label><input id="brokerAccessToken" type="password" placeholder="Secure integration required" autocomplete="off" disabled></div></div><div class="ami-auth-actions"><button type="button" id="clearBrokerDraft" class="btn">Clear Client ID</button><button class="btn primary" type="button" disabled>Authorize securely (not configured)</button></div><p class="smallnote" role="status" id="brokerAuthHelp">Status: Not connected. Credentials must be handled by your broker's authorised OAuth flow or a secure backend; they must never be saved to localStorage or bundled into the APK.</p></div>"""
+replace_once('<button class="btn primary" id="saveBrokerPreference"',credentials+'<button class="btn primary" id="saveBrokerPreference"')
+replace_once(
+    "byId('refresh').onclick=",
+    "byId('quickBrokerConnect').onclick=()=>showPage('broker');\n"
+    "byId('clearBrokerDraft').onclick=()=>{byId('brokerClientId').value='';byId('brokerAuthHelp').textContent='Client ID cleared. Status: Not connected.'};\n"
+    "byId('refresh').onclick=",
+)
+replace_once('</style></head>',"""#quickBrokerConnect{font-weight:850;min-height:46px;border:2px solid #adc3e1;color:#1b4f91;background:white}#brokerAuthSetup{border:2px solid #c4d7ee;background:#f5f9ff;border-radius:16px;padding:18px;margin:14px 0}#brokerAuthSetup h3{font-size:21px;margin:0 0 8px}#brokerAuthSetup p{line-height:1.6}.ami-auth-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(225px,1fr));gap:14px}.ami-auth-grid label{display:block;font-weight:850;font-size:16px;color:#12396d;margin-bottom:6px}.ami-auth-grid input{width:100%;box-sizing:border-box;font-size:17px;min-height:52px;padding:11px 12px;border:1px solid #afc3de;border-radius:10px}.ami-auth-grid input:disabled{background:#e6ebf3;opacity:1;color:#465979}.ami-auth-actions{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}.ami-auth-actions button{font-size:16px;font-weight:850;min-height:47px}@media(max-width:680px){.top .right{display:flex;flex-wrap:wrap;justify-content:flex-start}#quickBrokerConnect{font-size:15px}}
+</style></head>""")
+
 assert html.count("Profitmart Securities Private Limited") == 1, "Broker name must only appear in selector"
 INDEX.write_text(html, encoding="utf-8")
 print("Prepared independent-brand broker selector (no live API connected)")
