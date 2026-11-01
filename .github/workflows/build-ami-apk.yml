@@ -1,31 +1,38 @@
 name: Build AMI Android APK (Android 16)
 on:
   workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Debug testing or signed release with persistent GitHub signing secrets'
+        type: choice
+        required: true
+        default: debug
+        options:
+          - debug
+          - release
   push:
     branches: [main]
     paths:
       - 'android/**'
+      - 'scripts/prepare_build.py'
+      - 'scripts/prepare_watchlist.py'
+      - 'scripts/prepare_release.py'
       - 'AMI_Cloud_Build_Android16_GitHub_MCP.zip'
       - '.github/workflows/build-ami-apk.yml'
 permissions:
   contents: read
 jobs:
   build:
-    name: Build debug APK with official Android tooling
+    name: Build and validate AMI APK
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
       - name: Checkout AMI project
         uses: actions/checkout@v4
-      - name: Extract Android project from uploaded archive
+      - name: Prepare Android project and UI changes
         run: |
-          python3 - <<'PYTHON'
-          import zipfile
-          with zipfile.ZipFile('AMI_Cloud_Build_Android16_GitHub_MCP.zip') as archive:
-              for item in archive.infolist():
-                  if item.filename.startswith('android/') and '..' not in item.filename.split('/'):
-                      archive.extract(item, '.')
-          PYTHON
+          python3 scripts/prepare_build.py
+          python3 scripts/prepare_watchlist.py
       - name: Install Java 17
         uses: actions/setup-java@v4
         with:
@@ -39,19 +46,42 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - name: Build signed debug APK
+      - name: Build testing APK
+        if: ${{ inputs.build_type != 'release' }}
         working-directory: android
         run: gradle --no-daemon --stacktrace :app:assembleDebug
-      - name: Validate output APK exists
+      - name: Build signed release APK
+        if: ${{ inputs.build_type == 'release' }}
+        env:
+          AMI_KEYSTORE_BASE64: ${{ secrets.AMI_KEYSTORE_BASE64 }}
+          AMI_KEYSTORE_PASSWORD: ${{ secrets.AMI_KEYSTORE_PASSWORD }}
+          AMI_KEY_ALIAS: ${{ secrets.AMI_KEY_ALIAS }}
+          AMI_KEY_PASSWORD: ${{ secrets.AMI_KEY_PASSWORD }}
         run: |
-          test -s android/app/build/outputs/apk/debug/app-debug.apk
-          sha256sum android/app/build/outputs/apk/debug/app-debug.apk
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging android/app/build/outputs/apk/debug/app-debug.apk | head -15
+          export AMI_SIGNING_STORE_FILE="$RUNNER_TEMP/ami-release.jks"
+          python3 scripts/prepare_release.py
+          cd android
+          gradle --no-daemon --stacktrace :app:assembleRelease
+      - name: Verify signed release or testing APK
+        shell: bash
+        run: |
+          if [[ '${{ inputs.build_type }}' == 'release' ]]; then
+            APK=android/app/build/outputs/apk/release/app-release.apk
+            test -s "$APK"
+            "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$APK"
+          else
+            APK=android/app/build/outputs/apk/debug/app-debug.apk
+            test -s "$APK"
+            "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$APK"
+          fi
+          sha256sum "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | head -15
       - name: Downloadable AMI APK
         uses: actions/upload-artifact@v4
         with:
-          name: AMI-Android16-debug-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: AMI-${{ inputs.build_type == 'release' && 'Signed-Release' || 'Testing-Debug' }}-APK
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
           if-no-files-found: error
-
